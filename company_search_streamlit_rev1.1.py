@@ -50,9 +50,9 @@ def save_config(cfg):
         pass
 
 
-def get_streamlit_secret(key_name: str, default: str = "") -> str:
+def get_streamlit_secret(key: str, default: str = "") -> str:
     try:
-        value = st.secrets.get(key_name, default)
+        value = st.secrets.get(key, default)
         if value is None:
             return default
         return str(value)
@@ -1218,8 +1218,9 @@ def generate_report(company_name, homepage_url, cfg, gmark_excel_path, workplace
 def main():
     st.set_page_config(page_title="企業情報調査ツール Trial版", layout="wide",initial_sidebar_state="collapsed")
     cfg = load_config()
-    openai_api_key = get_streamlit_secret("OPENAI_API_KEY", "")
-    serpapi_key = get_streamlit_secret("SERPAPI_KEY", "")
+
+    secret_openai_api_key = get_streamlit_secret("OPENAI_API_KEY", "")
+    secret_serpapi_key = get_streamlit_secret("SERPAPI_KEY", "")
 
     st.title("企業情報調査ツール(Trial版)")
     st.caption("設定を変更する場合には、サイドバーを開いて設定してください")
@@ -1239,20 +1240,30 @@ def main():
     try:
         with st.sidebar:
             st.subheader("API設定")
-            openai_api_key = st.text_input("OpenAI API Key", value=cfg.get("openai_api_key", ""), type="password")
+            st.text_input(
+                "OpenAI API Key",
+                value="Secretsから読込済み" if secret_openai_api_key else "Secrets未設定",
+                type="password",
+                disabled=True,
+            )
             openai_model = st.text_input("OpenAI モデル名", value=cfg.get("openai_model", "gpt-4.1-mini"))
-            serpapi_key = st.text_input("SerpAPI Key", value=cfg.get("serpapi_key", ""), type="password")
+            st.text_input(
+                "SerpAPI Key",
+                value="Secretsから読込済み" if secret_serpapi_key else "Secrets未設定",
+                type="password",
+                disabled=True,
+            )
             use_serpapi = st.checkbox("SerpAPI を使用", value=cfg.get("use_serpapi", True))
             email_domain = st.text_input("メールドメイン（任意）", value=cfg.get("email_domain", ""))
- 
+
             if st.button("設定を保存"):
                 cfg.update({
-                    "openai_api_key": openai_api_key,
                     "openai_model": openai_model,
-                    "serpapi_key": serpapi_key,
-                    "use_serpapi": bool(use_serpapi and serpapi_key),
+                    "use_serpapi": bool(use_serpapi and secret_serpapi_key),
                     "email_domain": email_domain,
                 })
+                cfg.pop("openai_api_key", None)
+                cfg.pop("serpapi_key", None)
                 save_config(cfg)
                 st.success("設定を保存しました。")
 
@@ -1273,32 +1284,7 @@ def main():
             with col2:
                 homepage_url = st.text_input("ホームページURL（必須）", value=cfg.get("last_homepage_url", ""))
 
-#            c1, c2 = st.columns(2)
-#            with c1:
-#                gmark_excel_path_text = st.text_input("Gマーク認証ExcelのWindowsパス", value=cfg.get("gmark_excel_path", ""), help=r"例: C:\Data\gmark.xlsx")
-#                gmark_excel_upload = st.file_uploader("Gマーク認証Excelをアップロード", type=["xlsx", "xlsm", "xltx", "xltm"], key="gmark")
-#            with c2:
-#                workplace_excel_path_text = st.text_input("働きやすい職場認証ExcelのWindowsパス", value=cfg.get("workplace_excel_path", ""), help=r"例: C:\Data\workplace.xlsx")
-#                workplace_excel_upload = st.file_uploader("働きやすい職場認証Excelをアップロード", type=["xlsx", "xlsm", "xltx", "xltm"], key="workplace")
-#
-#            c3, c4 = st.columns(2)
-#            with c3:
-#                nta_csv_path_text = st.text_input("法人番号CSV（Shift-JIS）のWindowsパス", value=cfg.get("nta_csv_path", ""), help=r"例: C:\Data\houjin.csv")
-#                nta_csv_upload = st.file_uploader("法人番号CSVをアップロード", type=["csv"], key="nta")
-#            with c4:
-#                output_docx_path = st.text_input("出力Word保存先（Windowsローカル保存用、任意）", value=cfg.get("last_output_docx_path", ""), help=r"例: C:\Reports\company_report.docx")
-
             submitted = st.form_submit_button("調査開始", type="primary")
-
-#        st.markdown("### 入力状態確認")
-#        status_rows = [
-#            ("企業名", "入力済み" if company_name else "未入力"),
-#            ("ホームページURL", "入力済み" if homepage_url else "未入力"),
-#            ("GマークExcel", "存在" if (gmark_excel_path_text and os.path.exists(gmark_excel_path_text)) else ("アップロード済み" if gmark_excel_upload else "未指定")),
-#            ("働きやすい職場Excel", "存在" if (workplace_excel_path_text and os.path.exists(workplace_excel_path_text)) else ("アップロード済み" if workplace_excel_upload else "未指定")),
-#            ("法人番号CSV", "存在" if (nta_csv_path_text and os.path.exists(nta_csv_path_text)) else ("アップロード済み" if nta_csv_upload else "未指定")),
-#        ]
-#        st.table({"項目": [r[0] for r in status_rows], "状態": [r[1] for r in status_rows]})
 
         if submitted:
             st.session_state.logs = []
@@ -1310,7 +1296,7 @@ def main():
                 errors.append("企業名を入力してください。")
             if not homepage_url.strip():
                 errors.append("ホームページURLを入力してください。")
-            if not openai_api_key.strip():
+            if not secret_openai_api_key.strip():
                 errors.append("OpenAI API Key を設定してください。")
 
             if errors:
@@ -1318,8 +1304,10 @@ def main():
                     st.error(err)
             else:
                 cfg.update({
+                    "openai_api_key": secret_openai_api_key.strip(),
                     "openai_model": openai_model.strip() or "gpt-4.1-mini",
-                    "use_serpapi": bool(use_serpapi and serpapi_key.strip()),
+                    "serpapi_key": secret_serpapi_key.strip(),
+                    "use_serpapi": bool(use_serpapi and secret_serpapi_key.strip()),
                     "email_domain": email_domain.strip(),
                     "last_company_name": company_name.strip(),
                     "last_homepage_url": homepage_url.strip(),
@@ -1328,11 +1316,10 @@ def main():
                     "nta_csv_path": nta_csv_path_text.strip(),
                     "last_output_docx_path": output_docx_path.strip(),
                 })
-                save_config(cfg)
-
-                runtime_cfg = dict(cfg)
-                runtime_cfg["openai_api_key"] = openai_api_key.strip()
-                runtime_cfg["serpapi_key"] = serpapi_key.strip()
+                save_cfg = dict(cfg)
+                save_cfg.pop("openai_api_key", None)
+                save_cfg.pop("serpapi_key", None)
+                save_config(save_cfg)
 
                 gmark_excel_path = resolve_input_path("Gマーク", gmark_excel_path_text.strip(), gmark_excel_upload)
                 workplace_excel_path = resolve_input_path("働きやすい職場", workplace_excel_path_text.strip(), workplace_excel_upload)
@@ -1340,7 +1327,7 @@ def main():
 
                 try:
                     with st.spinner("調査中です..."):
-                        report_md = generate_report(company_name.strip(), homepage_url.strip(), runtime_cfg, gmark_excel_path, workplace_excel_path, nta_csv_path, log_func)
+                        report_md = generate_report(company_name.strip(), homepage_url.strip(), cfg, gmark_excel_path, workplace_excel_path, nta_csv_path, log_func)
                         st.session_state.report_md = report_md
                         report_docx_bytes = markdown_to_docx_bytes(report_md)
                         st.session_state.report_docx_bytes = report_docx_bytes
@@ -1363,9 +1350,6 @@ def main():
                     import traceback
                     st.error(f"調査中にエラーが発生しました: {e}")
                     st.code(traceback.format_exc(), language="python")
-
-#        st.markdown("### ログ")
-#        st.text_area("実行ログ", value="\n".join(st.session_state.logs), height=260)
 
         st.markdown("### レポート")
         if st.session_state.report_md:
@@ -1391,16 +1375,6 @@ def main():
         else:
             st.info("まだレポートは生成されていません。")
 
-#        st.markdown("### ログ")
-#        st.text_area("実行ログ", value="\n".join(st.session_state.logs), height=260)
-
-#        st.markdown("### Windows上でのファイル読込について")
-#        st.markdown(
-#            "- Streamlitを**自分のWindows PC上で起動**している場合は、`C:\\...` 形式のパスをそのまま指定できます。\n"
-#            "- Streamlit Community Cloud やサーバー上で動かす場合、**そのサーバーから見えるパスしか読めません**。その場合はアップロード欄を使ってください。\n"
-#            "- Tkinterの `filedialog` は使えないため、**パス入力 + file_uploader** に置き換えています。\n"
-#            "- 調査結果はブラウザ上では整形済みMarkdownで表示し、Windows保存時はWord（.docx）で出力できます。"
-#        )
     except Exception as e:
         import traceback
         st.error(f"初期描画でエラーが発生しました: {e}")
