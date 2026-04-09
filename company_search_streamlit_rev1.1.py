@@ -50,6 +50,16 @@ def save_config(cfg):
         pass
 
 
+def get_streamlit_secret(key_name: str, default: str = "") -> str:
+    try:
+        value = st.secrets.get(key_name, default)
+        if value is None:
+            return default
+        return str(value)
+    except Exception:
+        return default
+
+
 REQUIRED_LICENSES = {
     "建設": ["建設業許可", "JAC加入"],
     "運送": ["一般貨物運送許可", "運行管理者"],
@@ -1208,6 +1218,8 @@ def generate_report(company_name, homepage_url, cfg, gmark_excel_path, workplace
 def main():
     st.set_page_config(page_title="企業情報調査ツール Trial版", layout="wide",initial_sidebar_state="collapsed")
     cfg = load_config()
+    openai_api_key = get_streamlit_secret("OPENAI_API_KEY", "")
+    serpapi_key = get_streamlit_secret("SERPAPI_KEY", "")
 
     st.title("企業情報調査ツール(Trial版)")
     st.caption("設定を変更する場合には、サイドバーを開いて設定してください")
@@ -1306,9 +1318,7 @@ def main():
                     st.error(err)
             else:
                 cfg.update({
-                    "openai_api_key": openai_api_key.strip(),
                     "openai_model": openai_model.strip() or "gpt-4.1-mini",
-                    "serpapi_key": serpapi_key.strip(),
                     "use_serpapi": bool(use_serpapi and serpapi_key.strip()),
                     "email_domain": email_domain.strip(),
                     "last_company_name": company_name.strip(),
@@ -1320,13 +1330,17 @@ def main():
                 })
                 save_config(cfg)
 
+                runtime_cfg = dict(cfg)
+                runtime_cfg["openai_api_key"] = openai_api_key.strip()
+                runtime_cfg["serpapi_key"] = serpapi_key.strip()
+
                 gmark_excel_path = resolve_input_path("Gマーク", gmark_excel_path_text.strip(), gmark_excel_upload)
                 workplace_excel_path = resolve_input_path("働きやすい職場", workplace_excel_path_text.strip(), workplace_excel_upload)
                 nta_csv_path = resolve_input_path("法人番号CSV", nta_csv_path_text.strip(), nta_csv_upload)
 
                 try:
                     with st.spinner("調査中です..."):
-                        report_md = generate_report(company_name.strip(), homepage_url.strip(), cfg, gmark_excel_path, workplace_excel_path, nta_csv_path, log_func)
+                        report_md = generate_report(company_name.strip(), homepage_url.strip(), runtime_cfg, gmark_excel_path, workplace_excel_path, nta_csv_path, log_func)
                         st.session_state.report_md = report_md
                         report_docx_bytes = markdown_to_docx_bytes(report_md)
                         st.session_state.report_docx_bytes = report_docx_bytes
