@@ -1,6 +1,2 @@
-streamlit
-requests
-beautifulsoup4
-openpyxl
-python-docx
-openai
+streamlit>=1.32
+pandas>=2.0
